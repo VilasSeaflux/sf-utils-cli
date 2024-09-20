@@ -14,13 +14,15 @@ const choices = [
 		value: "feature/sf-socketio",
 		folder: "sf-socketio",
 		repoUrl: "git@git.seaflux.dev:boilerplates/utility-library-nodets.git",
-		deps: "socket.io@4.7.5",
+		deps: "jm-ez-l10n@1.0.0 moment@2.30.1 morgan@1.9.1 socket.io@4.7.5 uuid@8.3.2 winston@3.14.2",
+		devDeps: "@types/moment@2.13.0 @types/node-uuid@0.0.28",
 	},
 	{
 		name: "Strip Utility (sf-strip-2024)",
 		value: "sf-strip-2024",
 		repoUrl: "",
 		folder: "sf-strip",
+		deps: ""
 	},
 ];
 
@@ -57,9 +59,19 @@ prompt([
 				}
 
 				spinner.start(`Copying files to ${utilityFolder}...`);
-				// This makes sure the utility folder exists
-				if (!fs.existsSync(utilityFolder)) {
-					fs.mkdirSync(utilityFolder);
+
+				// check if src folder exists or not
+				// if yes then create utilities folder inside src folder
+				// else create utilities folder in root directory
+				const srcFolderPath = path.join(__dirname, "src");
+				let finalUtilityFolder = utilityFolder;
+
+				if (fs.existsSync(srcFolderPath)) {
+					finalUtilityFolder = path.join(srcFolderPath, "utilities");
+				}
+
+				if (!fs.existsSync(finalUtilityFolder)) {
+					fs.mkdirSync(finalUtilityFolder, { recursive: true });
 				}
 
 				// Copy files from the cloned repo to the utility folder
@@ -115,12 +127,12 @@ prompt([
 										//if yarn is selected then install using yarn
 										{
 											name: "install with yarn",
-											value: `yarn add ${selectedUtility.deps}`,
+											value: `yarn add ${selectedUtility.deps} && yarn add --dev ${selectedUtility.devDeps}`,
 										},
 										//if npm is selected then install using npm
 										{
 											name: "install with npm",
-											value: `npm install ${selectedUtility.deps}`,
+											value: `npm install ${selectedUtility.deps} && npm install --save-dev ${selectedUtility.devDeps}`,
 										},
 									],
 								},
