@@ -77,11 +77,24 @@ const cleanup = (destFolder) => {
 		"tsconfig.json",
 		".swcrc",
 	];
-	filesToDelete.forEach((file) => {
+
+	// Use fse.remove for each item
+	const deletePromises = filesToDelete.map((file) => {
 		const filePath = path.join(destFolder, file);
-		fs.unlink(filePath, handleError(`Error deleting ${filePath}`));
+		return fse.remove(filePath).catch((err) => {
+			console.warn(`Warning: Error deleting ${filePath}: ${err.message}`);
+		});
 	});
-	fse.remove(tempCloneDir, handleError("Error removing temporary folder"));
+
+	Promise.all(deletePromises)
+		.then(() => {
+			// Now remove the temp clone directory
+			fse.remove(tempCloneDir)
+				.catch(handleError("Error removing temporary folder"));
+		})
+		.catch((err) => {
+			console.error("Error during cleanup:", err);
+		});
 };
 
 const installDependencies = (selectedUtility, spinner) => {
@@ -105,9 +118,22 @@ const installDependencies = (selectedUtility, spinner) => {
 		const installCommand = answers.additionalLibs;
 		spinner.start("Installing dependencies...");
 
-		const child = exec(installCommand, { stdio: 'inherit' }, (error) => {
-			handleError("Error installing dependencies")(error);
-			spinner.succeed(`Dependencies installed successfully.`);
+		const child = exec(installCommand, { stdio: 'pipe' }, (error, stdout, stderr) => {
+			if (error) {
+				spinner.fail(`Error installing dependencies: ${stderr || error.message}`);
+			} else {
+				spinner.succeed("Dependencies installed successfully.");
+				// Optionally log the stdout if needed
+				console.log(stdout);
+			}
+		});
+
+		// If you want to log stdout and stderr while installing
+		child.stdout.on('data', (data) => {
+			// Handle stdout here if you want to log it
+		});
+		child.stderr.on('data', (data) => {
+			// Handle stderr here if you want to log it
 		});
 	});
 };
