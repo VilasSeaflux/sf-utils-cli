@@ -57,6 +57,33 @@ const createUtilityFolder = () => {
 	return utilityFolder;
 };
 
+const checkExistingUtility = (selectedUtility) => {
+	const existingFolder = path.join(utilityFolder, selectedUtility.folder);
+	return fs.existsSync(existingFolder) ? existingFolder : null;
+};
+
+const promptDeleteOldUtility = (existingFolder, selectedUtility, spinner) => {
+	prompt([
+		{
+			type: "confirm",
+			name: "deleteOld",
+			message: `The utility "${selectedUtility.name}" already exists. Do you want to delete the old version and add a new one?`,
+			default: false,
+		},
+	]).then((answers) => {
+		if (answers.deleteOld) {
+			fse.remove(existingFolder)
+				.then(() => {
+					spinner.succeed(`Old version of ${selectedUtility.name} deleted successfully.`);
+					cloneRepo(selectedUtility, spinner);
+				})
+				.catch(handleError("Error deleting old utility"));
+		} else {
+			spinner.fail("Operation canceled. No changes made.");
+		}
+	}).catch(handleError("Error during prompt"));
+};
+
 const copyFiles = (selectedUtility, spinner) => {
 	const destFolder = path.join(createUtilityFolder(), selectedUtility.folder);
 	fse.copy(tempCloneDir, destFolder, (err) => {
@@ -149,8 +176,14 @@ prompt([
 	.then((answers) => {
 		const selectedUtility = choices.find((choice) => choice.value === answers.utility);
 		if (selectedUtility.repoUrl) {
+			const existingFolder = checkExistingUtility(selectedUtility);
 			const spinner = ora();
-			cloneRepo(selectedUtility, spinner);
+
+			if (existingFolder) {
+				promptDeleteOldUtility(existingFolder, selectedUtility, spinner);
+			} else {
+				cloneRepo(selectedUtility, spinner);
+			}
 		} else {
 			ora().fail("Repository URL is missing for the selected utility.");
 		}
