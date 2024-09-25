@@ -14,7 +14,7 @@ const choices = [
 		value: "feature/sf-socketio",
 		folder: "sf-socketio",
 		repoUrl: "git@git.seaflux.dev:boilerplates/utility-library-nodets.git",
-		deps: "jm-ez-l10n@1.0.0 moment@2.30.1 morgan@1.9.1 socket.io@4.7.5 uuid@8.3.2 winston@3.14.2",
+		deps: "jm-ez-l10n@1.0.0 moment@2.30.1 morgan@1.9.1 socket.io@4.7.5 uuid@8.3.2 winston@3.14.2 redis@4.7.0",
 		devDeps: "@types/moment@2.13.0 @types/node-uuid@0.0.28",
 	},
 	{
@@ -73,6 +73,7 @@ const cleanup = (destFolder) => {
 		"package.json",
 		"package-lock.json",
 		".gitignore",
+		".git",
 		"tsconfig.json",
 		".swcrc",
 	];
