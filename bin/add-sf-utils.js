@@ -21,140 +21,111 @@ const choices = [
 		name: "Strip Utility (sf-strip-2024)",
 		value: "sf-strip-2024",
 		repoUrl: "",
-		folder: "sf-strip",
+		folder: "sf-stripe",
 		deps: ""
 	},
 ];
 
 const prompt = createPromptModule();
+const rootDir = process.cwd(); // Get the current working directory (root)
+const utilityFolder = path.join(rootDir, "src", "utilities"); // Set utilities path
+const tempCloneDir = path.join(rootDir, "temp-clone");
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const handleError = (message) => (error) => {
+	if (error) {
+		const spinner = ora();
+		spinner.fail(`${message}: ${error.message}`);
+	}
+};
+
+const cloneRepo = (selectedUtility, spinner) => {
+	spinner.start(`Cloning ${selectedUtility.name} from ${selectedUtility.repoUrl}`);
+	exec(
+		`git clone -b ${selectedUtility.value} ${selectedUtility.repoUrl} ${tempCloneDir}`,
+		(error) => {
+			handleError("Error cloning repository")(error);
+			spinner.succeed(`${selectedUtility.name} cloned successfully.`);
+			copyFiles(selectedUtility, spinner);
+		}
+	);
+};
+
+const createUtilityFolder = () => {
+	if (!fs.existsSync(utilityFolder)) {
+		fs.mkdirSync(utilityFolder, { recursive: true });
+	}
+	return utilityFolder;
+};
+
+const copyFiles = (selectedUtility, spinner) => {
+	const destFolder = path.join(createUtilityFolder(), selectedUtility.folder);
+	fse.copy(tempCloneDir, destFolder, (err) => {
+		handleError("Error copying files")(err);
+		spinner.succeed(`${selectedUtility.name} has been added to your utilities folder.`);
+		cleanup(destFolder);
+		// Call installDependencies after copying files
+		installDependencies(selectedUtility, spinner);
+	});
+};
+
+const cleanup = (destFolder) => {
+	const filesToDelete = [
+		"package.json",
+		"package-lock.json",
+		".gitignore",
+		"tsconfig.json",
+		".swcrc",
+	];
+	filesToDelete.forEach((file) => {
+		const filePath = path.join(destFolder, file);
+		fs.unlink(filePath, handleError(`Error deleting ${filePath}`));
+	});
+	fse.remove(tempCloneDir, handleError("Error removing temporary folder"));
+};
+
+const installDependencies = (selectedUtility, spinner) => {
+	prompt([
+		{
+			type: "list",
+			name: "additionalLibs",
+			message: "Would you like to install additional dependencies?",
+			choices: [
+				{
+					name: "Install with Yarn",
+					value: `yarn add ${selectedUtility.deps} && yarn add --dev ${selectedUtility.devDeps}`,
+				},
+				{
+					name: "Install with NPM",
+					value: `npm install ${selectedUtility.deps} && npm install --save-dev ${selectedUtility.devDeps}`,
+				},
+			],
+		},
+	]).then((answers) => {
+		const installCommand = answers.additionalLibs;
+		spinner.start("Installing dependencies...");
+
+		const child = exec(installCommand, { stdio: 'inherit' }, (error) => {
+			handleError("Error installing dependencies")(error);
+			spinner.succeed(`Dependencies installed successfully.`);
+		});
+	});
+};
+
 prompt([
 	{
 		type: "list",
 		name: "utility",
 		message: "Which utility would you like to add?",
-		choices: choices.map((choice) => ({
-			name: choice.name,
-			value: choice.value,
-		})),
+		choices: choices.map((choice) => ({ name: choice.name, value: choice.value })),
 	},
 ])
 	.then((answers) => {
-		const selectedUtility = choices.find(
-			(choice) => choice.value === answers.utility,
-		);
-		const repoUrl = selectedUtility.repoUrl;
-		const utilityFolder = "./utilities";
-		const tempCloneDir = path.join(__dirname, "temp-clone");
-		const spinner = ora();
-		spinner.succeed(`Cloning ${selectedUtility.name} from ${repoUrl}`);
-		exec(
-			`git clone -b ${selectedUtility.value} ${repoUrl} ${tempCloneDir}`,
-			(error, stdout, stderr) => {
-				if (error) {
-					spinner.fail(`Error cloning repository: ${error.message}`);
-					return;
-				}
-
-				spinner.start(`Copying files to ${utilityFolder}...`);
-
-				// check if src folder exists or not
-				// if yes then create utilities folder inside src folder
-				// else create utilities folder in root directory
-				const srcFolderPath = path.join(__dirname, "src");
-				let finalUtilityFolder = utilityFolder;
-
-				if (fs.existsSync(srcFolderPath)) {
-					finalUtilityFolder = path.join(srcFolderPath, "utilities");
-				}
-
-				if (!fs.existsSync(finalUtilityFolder)) {
-					fs.mkdirSync(finalUtilityFolder, { recursive: true });
-				}
-
-				// Copy files from the cloned repo to the utility folder
-				const srcFolder = path.join(tempCloneDir);
-				const destFolder = path.join(utilityFolder, selectedUtility.folder);
-				fse.copy(srcFolder, destFolder, (err) => {
-					if (err) {
-						spinner.fail(`Error copying files: ${err.message}`);
-					} else {
-						spinner.succeed(
-							`${selectedUtility.name} has been added to your utilities folder.`,
-						);
-					}
-					// Remove package.json and package-lock.json if they exist
-					const filesToDelete = [
-						"package.json",
-						"package-lock.json",
-						".gitignore",
-						"tsconfig.json",
-						".swcrc",
-					];
-					// Iterate over each file/directory to remove
-					for (const file of filesToDelete) {
-						const filePath = path.join(destFolder, file);
-
-						try {
-							// Remove the file or directory
-							fs.unlink(filePath, (err) => {
-								if (err) {
-									spinner.fail(`Error deleting ${filePath}:`, err.message);
-								}
-							});
-						} catch (err) {
-							spinner.fail(`Error deleting ${filePath}:`, err.message);
-						}
-					}
-
-					//Remove the temporary clone directory
-					fse.remove(tempCloneDir, (removeErr) => {
-						if (removeErr) {
-							spinner.fail(
-								`Error removing temporary folder: ${removeErr.message}`,
-							);
-						} else {
-							//install deps using yarn or npm
-							prompt([
-								{
-									type: "list",
-									name: "additionalLibs",
-									message: "Would you like to install additional dependencies?",
-									//give 2 options either npm or yarn
-									choices: [
-										//if yarn is selected then install using yarn
-										{
-											name: "install with yarn",
-											value: `yarn add ${selectedUtility.deps} && yarn add --dev ${selectedUtility.devDeps}`,
-										},
-										//if npm is selected then install using npm
-										{
-											name: "install with npm",
-											value: `npm install ${selectedUtility.deps} && npm install --save-dev ${selectedUtility.devDeps}`,
-										},
-									],
-								},
-							]).then((answers) => {
-								spinner.start("Installing dependencies...");
-								exec(answers.additionalLibs, (error, stdout, stderr) => {
-									if (error) {
-										spinner.fail(
-											`Error installing dependencies: ${error.message}`,
-										);
-										return;
-									}
-									spinner.succeed(`Dependencies installed: ${stdout}`);
-								});
-							});
-						}
-					});
-				});
-			},
-		);
+		const selectedUtility = choices.find((choice) => choice.value === answers.utility);
+		if (selectedUtility.repoUrl) {
+			const spinner = ora();
+			cloneRepo(selectedUtility, spinner);
+		} else {
+			ora().fail("Repository URL is missing for the selected utility.");
+		}
 	})
-	.catch((error) => {
-		const spinner = ora();
-		spinner.fail("Error during inquirer prompt:", error);
-	});
+	.catch(handleError("Error during prompt"));
